@@ -1,0 +1,26 @@
+{
+    "name": "takeru-yamamoto/sentinel",
+    "description": "Detect issues related to quality of PHP code",
+    "version": "1.0.0",
+    "keywords": [
+        "takeru-yamamoto",
+        "php",
+        "package",
+        "sentinel",
+        "php-sentinel"
+    ],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Takeru Yamamoto"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Sentinel\\": "src"
+        }
+    },
+    "require": {
+        "php": ">=8.3.0"
+    }
+}
