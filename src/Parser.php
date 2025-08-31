@@ -94,6 +94,8 @@ class Parser implements ParserContract
             $this->parseClassNode($line, $lineNumber);
             $this->parsePropertyNode($line, $lineNumber);
             $this->parseFunctionNode($line, $lineNumber);
+
+            $this->trackClassEnd($lineNumber);
         }
     }
 
@@ -106,6 +108,24 @@ class Parser implements ParserContract
     protected function updateBraceLevel(string $line): void
     {
         $this->braceLevel += substr_count($line, "{") - substr_count($line, "}");
+    }
+
+    /**
+     * Track class end
+     *
+     * @param int $lineNumber
+     * @return void
+     */
+    protected function trackClassEnd(int $lineNumber): void
+    {
+        if (!$this->inClass) return;
+
+        if ($this->braceLevel > $this->classBraceLevel) return;
+
+        if ($this->currentClass !== null) $this->currentClass->setEnd($lineNumber);
+
+        $this->inClass      = false;
+        $this->currentClass = null;
     }
 
     /**
@@ -295,13 +315,11 @@ class Parser implements ParserContract
 
         $class->setNamespace($this->namespace);
 
-        $this->currentClass = $class;
-
         $this->setExtendsToClassNode($class, $line);
         $this->addImplementsToClassNode($class, $line);
-        $this->setEndToClassNode($class, $lineNumber);
 
-        $this->classes[] = $class;
+        $this->currentClass = $class;
+        $this->classes[]    = $class;
     }
 
     /**
@@ -341,23 +359,6 @@ class Parser implements ParserContract
 
             $class->addImplements($interface);
         }
-    }
-
-    /**
-     * Set end to class node
-     *
-     * @param \Sentinel\Nodes\ClassNode $class
-     * @param int $lineNumber
-     * @return void
-     */
-    protected function setEndToClassNode(ClassNode $class, int $lineNumber): void
-    {
-        if ($this->braceLevel > $this->classBraceLevel) return;
-
-        $class->setEnd($lineNumber);
-
-        $this->currentClass = null;
-        $this->inClass      = false;
     }
 
     /*----------------------------------------*
