@@ -297,9 +297,9 @@ class Parser implements ParserContract
 
         $this->currentClass = $class;
 
-        $class = $this->setExtendsToClassNode($class, $line);
-        $class = $this->addImplementsToClassNode($class, $line);
-        $class = $this->setEndToClassNode($class, $lineNumber);
+        $this->setExtendsToClassNode($class, $line);
+        $this->addImplementsToClassNode($class, $line);
+        $this->setEndToClassNode($class, $lineNumber);
 
         $this->classes[] = $class;
     }
@@ -309,17 +309,15 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\ClassNode $class
      * @param string $line
-     * @return \Sentinel\Nodes\ClassNode
+     * @return void
      */
-    protected function setExtendsToClassNode(ClassNode $class, string $line): ClassNode
+    protected function setExtendsToClassNode(ClassNode $class, string $line): void
     {
-        if (!preg_match("/extends\s+([a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)/", $line, $matches)) return $class;
+        if (!preg_match("/extends\s+([a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)/", $line, $matches)) return;
 
         $extends = $matches[1];
 
         $class->setExtends($extends);
-
-        return $class;
     }
 
     /**
@@ -327,11 +325,11 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\ClassNode $class
      * @param string $line
-     * @return \Sentinel\Nodes\ClassNode
+     * @return void
      */
-    protected function addImplementsToClassNode(ClassNode $class, string $line): ClassNode
+    protected function addImplementsToClassNode(ClassNode $class, string $line): void
     {
-        if (!preg_match("/implements\s+(.+)/", $line, $matches)) return $class;
+        if (!preg_match("/implements\s+(.+)/", $line, $matches)) return;
 
         $interfacesList = preg_replace("/\s*\{\s*$/", "", trim($matches[1]));
         $interfaces     = preg_split("/,\s*/", $interfacesList);
@@ -343,8 +341,6 @@ class Parser implements ParserContract
 
             $class->addImplements($interface);
         }
-
-        return $class;
     }
 
     /**
@@ -352,18 +348,16 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\ClassNode $class
      * @param int $lineNumber
-     * @return \Sentinel\Nodes\ClassNode
+     * @return void
      */
-    protected function setEndToClassNode(ClassNode $class, int $lineNumber): ClassNode
+    protected function setEndToClassNode(ClassNode $class, int $lineNumber): void
     {
-        if ($this->braceLevel > $this->classBraceLevel) return $class;
+        if ($this->braceLevel > $this->classBraceLevel) return;
 
         $class->setEnd($lineNumber);
 
         $this->currentClass = null;
         $this->inClass      = false;
-
-        return $class;
     }
 
     /*----------------------------------------*
@@ -404,9 +398,9 @@ class Parser implements ParserContract
 
         $property = new PropertyNode($lineNumber, $name, $visibility, $isStatic);
 
-        $property = $this->setClassNameToPropertyNode($property);
-        $property = $this->setTypeToPropertyNode($property, $line);
-        $property = $this->setPHPDocToPropertyNode($property, $lineNumber);
+        $this->setClassNameToPropertyNode($property);
+        $this->setTypeToPropertyNode($property, $line);
+        $this->setPHPDocToPropertyNode($property, $lineNumber);
 
         $this->properties[] = $property;
     }
@@ -430,15 +424,13 @@ class Parser implements ParserContract
      * Set class name to property node
      *
      * @param \Sentinel\Nodes\PropertyNode $property
-     * @return \Sentinel\Nodes\PropertyNode
+     * @return void
      */
-    protected function setClassNameToPropertyNode(PropertyNode $property): PropertyNode
+    protected function setClassNameToPropertyNode(PropertyNode $property): void
     {
-        if ($this->currentClass === null) return $property;
+        if ($this->currentClass === null) return;
 
         $property->setClassName($this->currentClass->name());
-
-        return $property;
     }
 
     /**
@@ -446,17 +438,15 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\PropertyNode $property
      * @param string $line
-     * @return \Sentinel\Nodes\PropertyNode
+     * @return void
      */
-    protected function setTypeToPropertyNode(PropertyNode $property, string $line): PropertyNode
+    protected function setTypeToPropertyNode(PropertyNode $property, string $line): void
     {
-        if (!preg_match("/(public|private|protected)\s+(?:static\s+)?(\??[a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)\s+\$/", $line, $matches)) return $property;
+        if (!preg_match("/(public|private|protected)\s+(?:static\s+)?(\??[a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)\s+\$/", $line, $matches)) return;
 
         $type = $matches[2];
 
         $property->setType($type);
-
-        return $property;
     }
 
     /**
@@ -464,17 +454,15 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\PropertyNode $property
      * @param int $lineNumber
-     * @return \Sentinel\Nodes\PropertyNode
+     * @return void
      */
-    protected function setPHPDocToPropertyNode(PropertyNode $property, int $lineNumber): PropertyNode
+    protected function setPHPDocToPropertyNode(PropertyNode $property, int $lineNumber): void
     {
         $phpDoc = $this->extractPHPDocNode($lineNumber);
 
-        if ($phpDoc === null) return $property;
+        if ($phpDoc === null) return;
 
         $property->setPHPDoc($phpDoc);
-
-        return $property;
     }
 
     /*----------------------------------------*
@@ -514,9 +502,9 @@ class Parser implements ParserContract
 
         $function = new FunctionNode($lineNumber, $name, $visibility, $isStatic, $params);
 
-        $function = $this->setClassNameToFunctionNode($function);
-        $function = $this->setReturnTypeToFunctionNode($function, $line);
-        $function = $this->setPHPDocToFunctionNode($function, $lineNumber);
+        $this->setClassNameToFunctionNode($function);
+        $this->setReturnTypeToFunctionNode($function, $line);
+        $this->setPHPDocToFunctionNode($function, $lineNumber);
 
         $this->functions[] = $function;
     }
@@ -525,7 +513,7 @@ class Parser implements ParserContract
      * Parse function parameters
      *
      * @param string $paramString
-     * @return array<string, \Sentinel\Nodes\Leaves\Parameter>
+     * @return array<int, \Sentinel\Nodes\Leaves\Parameter>
      */
     protected function parseFunctionParameters(string $paramString): array
     {
@@ -557,15 +545,13 @@ class Parser implements ParserContract
      * Set class name to function node
      *
      * @param \Sentinel\Nodes\FunctionNode $function
-     * @return \Sentinel\Nodes\FunctionNode
+     * @return void
      */
-    protected function setClassNameToFunctionNode(FunctionNode $function): FunctionNode
+    protected function setClassNameToFunctionNode(FunctionNode $function): void
     {
-        if (!$this->inClass || $this->currentClass === null) return $function;
+        if (!$this->inClass || $this->currentClass === null) return;
 
         $function->setClassName($this->currentClass->name());
-
-        return $function;
     }
 
     /**
@@ -573,17 +559,15 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\FunctionNode $function
      * @param string $line
-     * @return \Sentinel\Nodes\FunctionNode
+     * @return void
      */
-    protected function setReturnTypeToFunctionNode(FunctionNode $function, string $line): FunctionNode
+    protected function setReturnTypeToFunctionNode(FunctionNode $function, string $line): void
     {
-        if (!preg_match("/\)\s*:\s*(\??[a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)/", $line, $matches)) return $function;
+        if (!preg_match("/\)\s*:\s*(\??[a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)/", $line, $matches)) return;
 
         $returnType = $matches[1];
 
         $function->setReturnType($returnType);
-
-        return $function;
     }
 
     /**
@@ -591,16 +575,14 @@ class Parser implements ParserContract
      *
      * @param \Sentinel\Nodes\FunctionNode $function
      * @param int $lineNumber
-     * @return \Sentinel\Nodes\FunctionNode
+     * @return void
      */
-    protected function setPHPDocToFunctionNode(FunctionNode $function, int $lineNumber): FunctionNode
+    protected function setPHPDocToFunctionNode(FunctionNode $function, int $lineNumber): void
     {
         $phpDoc = $this->extractPHPDocNode($lineNumber);
 
-        if ($phpDoc === null) return $function;
+        if ($phpDoc === null) return;
 
         $function->setPHPDoc($phpDoc);
-
-        return $function;
     }
 }
