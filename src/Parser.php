@@ -11,7 +11,6 @@ use Sentinel\Nodes\UseNode;
 use Sentinel\Nodes\ClassNode;
 use Sentinel\Nodes\PropertyNode;
 use Sentinel\Nodes\FunctionNode;
-
 use Sentinel\Nodes\Leaves\Parameter;
 
 /**
@@ -129,8 +128,7 @@ class Parser implements ParserContract
 
             if (!$inDoc) {
                 if (preg_match("/^\s*\*\/\s*$/", $line)) {
-                    $inDoc = true;
-
+                    $inDoc   = true;
                     $endLine = $i;
 
                     array_unshift($phpDocLines, $line);
@@ -297,12 +295,13 @@ class Parser implements ParserContract
 
         $class->setNamespace($this->namespace);
 
+        $this->currentClass = $class;
+
         $class = $this->setExtendsToClassNode($class, $line);
         $class = $this->addImplementsToClassNode($class, $line);
         $class = $this->setEndToClassNode($class, $lineNumber);
 
-        $this->currentClass = $class;
-        $this->classes[]    = $class;
+        $this->classes[] = $class;
     }
 
     /**
