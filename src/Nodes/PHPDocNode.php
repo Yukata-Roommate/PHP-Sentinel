@@ -462,7 +462,7 @@ class PHPDocNode
      */
     protected function parseThrowsTag(string $content): void
     {
-        if (preg_match("/^(\S+)(?:\s+(.*))?$/", $content, $matches)) return;
+        if (!preg_match("/^(\S+)(?:\s+(.*))?$/", $content, $matches)) return;
 
         $exception   = $matches[1];
         $description = $matches[2] ?? null;
@@ -478,7 +478,7 @@ class PHPDocNode
      */
     protected function parseVarTag(string $content): void
     {
-        if (preg_match("/^(\S+)(?:\s+\$(\w+))?(?:\s+(.*))?$/", $content, $matches)) return;
+        if (!preg_match("/^(\S+)(?:\s+\$(\w+))?(?:\s+(.*))?$/", $content, $matches)) return;
 
         $type        = $matches[1];
         $name        = $matches[2] ?? null;
