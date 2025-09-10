@@ -7,7 +7,6 @@ namespace Sentinel;
 use Sentinel\Contracts\Runner as RunnerContract;
 use Sentinel\Contracts\Detector;
 use Sentinel\Contracts\Output as OutputContract;
-use Sentinel\Contracts\Issue;
 
 use Sentinel\Output;
 use Sentinel\Exceptions\DirectoryNotFoundException;
@@ -28,7 +27,7 @@ class Runner implements RunnerContract
      *
      * @param \Sentinel\Contracts\Output|null $output
      */
-    public function __construct(?OutputContract $output = null)
+    public function __construct(OutputContract|null $output = null)
     {
         $this->output = $output ?? new Output();
     }
