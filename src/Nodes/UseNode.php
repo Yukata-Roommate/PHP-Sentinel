@@ -22,7 +22,7 @@ class UseNode
      * @param string $fullName
      * @param string|null $alias
      */
-    public function __construct(int $line, string $fullName, ?string $alias = null)
+    public function __construct(int $line, string $fullName, string|null $alias = null)
     {
         $this->line  = $line;
         $this->alias = $alias;
