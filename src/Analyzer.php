@@ -62,15 +62,21 @@ class Analyzer implements AnalyzerContract
      */
     public function setFile(string $file): static
     {
+        if (!file_exists($file)) throw new FileNotFoundException($file);
+
         if (!is_file($file)) throw new FileNotFoundException($file);
 
         if (!is_readable($file)) throw new FileReadException($file);
 
-        $this->file    = $file;
-        $this->content = file_get_contents($file);
-        $this->lines   = explode(PHP_EOL, $this->content);
+        $this->file = $file;
 
-        $this->parser = new Parser($this->lines);
+        $content = @file_get_contents($file);
+
+        if ($content === false) throw new FileReadException($file);
+
+        $this->content = $content;
+        $this->lines   = array_values(preg_split("/\r\n|\r|\n/", $this->content));
+        $this->parser  = new Parser($this->lines);
 
         return $this;
     }

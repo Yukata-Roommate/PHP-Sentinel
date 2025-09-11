@@ -23,7 +23,7 @@ class ReturnTag extends PHPDocTag
      * @param string $type
      * @param string|null $description
      */
-    public function __construct(string $type, string|null $description = null)
+    public function __construct(string $type, string|null $description)
     {
         $this->type  = $type;
         $this->types = $this->parseType($type);

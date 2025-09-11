@@ -136,7 +136,7 @@ class PHPDocNode
     {
         if (!$this->hasParam($name)) throw new ParamTagNotFoundException($name);
 
-        return $this->params[$name];
+        return $this->params[ltrim($name, "$")];
     }
 
     /**
@@ -147,7 +147,7 @@ class PHPDocNode
      */
     public function hasParam(string $name): bool
     {
-        return isset($this->params[$name]);
+        return isset($this->params[ltrim($name, "$")]);
     }
 
     /*----------------------------------------*
@@ -223,7 +223,7 @@ class PHPDocNode
     {
         if (!$this->hasThrows($exception)) throw new ThrowsTagNotFoundException($exception);
 
-        return $this->throws[$exception];
+        return $this->throws[ltrim($exception, "\\")];
     }
 
     /**
@@ -234,7 +234,7 @@ class PHPDocNode
      */
     public function hasThrows(string $exception): bool
     {
-        return isset($this->throws[$exception]);
+        return isset($this->throws[ltrim($exception, "\\")]);
     }
 
     /*----------------------------------------*
@@ -349,6 +349,49 @@ class PHPDocNode
     }
 
     /*----------------------------------------*
+     * Other Tags
+     *----------------------------------------*/
+
+    /**
+     * Other tags
+     *
+     * @var array<string, array<string>>
+     */
+    protected array $otherTags = [];
+
+    /**
+     * Get other tags by name
+     *
+     * @param string $tagName
+     * @return array<string>
+     */
+    public function getTagsByName(string $tagName): array
+    {
+        return $this->otherTags[$tagName] ?? [];
+    }
+
+    /**
+     * Check if has tag
+     *
+     * @param string $tagName
+     * @return bool
+     */
+    public function hasTag(string $tagName): bool
+    {
+        return isset($this->otherTags[$tagName]) && !empty($this->otherTags[$tagName]);
+    }
+
+    /**
+     * Get all tags
+     *
+     * @return array<string, array<string>>
+     */
+    public function getAllTags(): array
+    {
+        return $this->otherTags;
+    }
+
+    /*----------------------------------------*
      * Parse
      *----------------------------------------*/
 
@@ -362,13 +405,28 @@ class PHPDocNode
     {
         $lines = explode("\n", $content);
 
-        $summaryLines     = [];
-        $descriptionLines = [];
-        $inDescription    = false;
+        $summaryLines            = [];
+        $descriptionLines        = [];
+        $inDescription           = false;
+        $currentMultilineTag     = null;
+        $currentMultilineContent = "";
 
         foreach ($lines as $line) {
             $line = preg_replace("/^\s*\/?\*+\/?/", "", $line);
             $line = trim($line);
+
+            if ($currentMultilineTag !== null) {
+                if (preg_match("/^@\w+/", $line) || preg_match("/^\*\/$/", $line)) {
+                    $this->parseTag($currentMultilineTag, trim($currentMultilineContent));
+
+                    $currentMultilineTag     = null;
+                    $currentMultilineContent = "";
+                } else {
+                    $currentMultilineContent .= " " . $line;
+
+                    continue;
+                }
+            }
 
             if (empty($line)) {
                 if (!empty($summaryLines) && !$inDescription) $inDescription = true;
@@ -377,7 +435,15 @@ class PHPDocNode
             }
 
             if (preg_match("/^@(\w+)(?:\s+(.*))?$/", $line, $matches)) {
-                $this->parseTag($matches[1], $matches[2] ?? "");
+                $tagName    = $matches[1];
+                $tagContent = $matches[2] ?? "";
+
+                if ($this->mightBeMultilineTag($tagName, $tagContent)) {
+                    $currentMultilineTag     = $tagName;
+                    $currentMultilineContent = $tagContent;
+                } else {
+                    $this->parseTag($tagName, $tagContent);
+                }
 
                 continue;
             }
@@ -389,8 +455,30 @@ class PHPDocNode
             }
         }
 
+        if ($currentMultilineTag !== null) $this->parseTag($currentMultilineTag, trim($currentMultilineContent));
+
         $this->summary     = !empty($summaryLines) ? implode(" ", $summaryLines) : null;
         $this->description = !empty($descriptionLines) ? implode("\n", $descriptionLines) : null;
+    }
+
+    /**
+     * Check if tag might be multiline
+     *
+     * @param string $tagName
+     * @param string $content
+     * @return bool
+     */
+    protected function mightBeMultilineTag(string $tagName, string $content): bool
+    {
+        $multilineTags = ["param", "return", "throws", "var", "deprecated", "see", "example"];
+
+        if (!in_array($tagName, $multilineTags, true)) return false;
+
+        if ($tagName === "param" && preg_match("/^\S+\s+\$\w+$/", $content)) return true;
+
+        if ($tagName === "return" && preg_match("/^\S+$/", $content)) return true;
+
+        return false;
     }
 
     /**
@@ -405,18 +493,29 @@ class PHPDocNode
         switch ($name) {
             case "param":
                 $this->parseParamTag($content);
+
                 break;
             case "return":
                 $this->parseReturnTag($content);
+
                 break;
             case "throws":
                 $this->parseThrowsTag($content);
+
                 break;
             case "var":
                 $this->parseVarTag($content);
+
                 break;
             case "deprecated":
                 $this->parseDeprecatedTag($content);
+
+                break;
+            default:
+                if (!isset($this->otherTags[$name])) $this->otherTags[$name] = [];
+
+                $this->otherTags[$name][] = $content;
+
                 break;
         }
     }
@@ -429,7 +528,10 @@ class PHPDocNode
      */
     protected function parseParamTag(string $content): void
     {
-        if (!preg_match("/^(\S+)\s+\$(\w+)(?:\s+(.*))?$/", $content, $matches)) return;
+        $patternStandard = "/^([^$\s]+(?:\|[^$\s]+)*(?:\[\])?)\s+\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(.*))?$/";
+        $patternVariadic = "/^([^$\s]+(?:\|[^$\s]+)*)\s+\.\.\.\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(.*))?$/";
+
+        if (!preg_match($patternStandard, $content, $matches) && !preg_match($patternVariadic, $content, $matches)) return;
 
         $name        = $matches[2];
         $type        = $matches[1];
@@ -446,7 +548,7 @@ class PHPDocNode
      */
     protected function parseReturnTag(string $content): void
     {
-        if (!preg_match("/^(\S+)(?:\s+(.*))?$/", $content, $matches)) return;
+        if (!preg_match("/^(\S+(?:\|\S+)*(?:\[\])?)(?:\s+(.*))?$/", $content, $matches)) return;
 
         $type        = $matches[1];
         $description = $matches[2] ?? null;
@@ -462,9 +564,9 @@ class PHPDocNode
      */
     protected function parseThrowsTag(string $content): void
     {
-        if (!preg_match("/^(\S+)(?:\s+(.*))?$/", $content, $matches)) return;
+        if (!preg_match("/^(\\\\?[a-zA-Z_][a-zA-Z0-9_\\\\]*)(?:\s+(.*))?$/", $content, $matches)) return;
 
-        $exception   = $matches[1];
+        $exception   = ltrim($matches[1], "\\");
         $description = $matches[2] ?? null;
 
         $this->throws[$exception] = new ThrowsTag($exception, $description);
@@ -478,11 +580,25 @@ class PHPDocNode
      */
     protected function parseVarTag(string $content): void
     {
-        if (!preg_match("/^(\S+)(?:\s+\$(\w+))?(?:\s+(.*))?$/", $content, $matches)) return;
+        $patternTypeNameDesc = "/^(\S+(?:\|\S+)*(?:\[\])?)\s+\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+(.*))?$/";
+        $patternNameTypeDesc = "/^\$([a-zA-Z_][a-zA-Z0-9_]*)\s+(\S+(?:\|\S+)*(?:\[\])?)(?:\s+(.*))?$/";
+        $patternTypeDesc     = "/^(\S+(?:\|\S+)*(?:\[\])?)(?:\s+(.*))?$/";
 
-        $type        = $matches[1];
-        $name        = $matches[2] ?? null;
-        $description = $matches[3] ?? null;
+        if (preg_match($patternTypeNameDesc, $content, $matches)) {
+            $type = $matches[1];
+            $name = $matches[2];
+            $description = $matches[3] ?? null;
+        } elseif (preg_match($patternNameTypeDesc, $content, $matches)) {
+            $name = $matches[1];
+            $type = $matches[2];
+            $description = $matches[3] ?? null;
+        } elseif (preg_match($patternTypeDesc, $content, $matches)) {
+            $type = $matches[1];
+            $name = null;
+            $description = $matches[2] ?? null;
+        } else {
+            return;
+        }
 
         $this->var = new VarTag($type, $name, $description);
     }
@@ -496,6 +612,6 @@ class PHPDocNode
     protected function parseDeprecatedTag(string $content): void
     {
         $this->isDeprecated      = true;
-        $this->deprecatedMessage = !empty($content) ? $content : null;
+        $this->deprecatedMessage = !empty($content) ? trim($content) : null;
     }
 }

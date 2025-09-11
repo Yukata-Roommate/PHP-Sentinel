@@ -134,4 +134,11 @@ interface Detector
      * @return int
      */
     public function files(): int;
+
+    /**
+     * Get error messages during detection
+     *
+     * @return array<string, string>
+     */
+    public function errors(): array;
 }

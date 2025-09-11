@@ -23,7 +23,7 @@ class ThrowsTag extends PHPDocTag
      * @param string $exception
      * @param string|null $description
      */
-    public function __construct(string $exception, string|null $description = null)
+    public function __construct(string $exception, string|null $description)
     {
         $this->exception = ltrim($exception, "\\");
 

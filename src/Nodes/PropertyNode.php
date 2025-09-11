@@ -28,7 +28,7 @@ class PropertyNode
     public function __construct(int $line, string $name, string $visibility, bool $isStatic)
     {
         $this->line       = $line;
-        $this->name       = $name;
+        $this->name       = ltrim($name, "$");
         $this->visibility = $visibility;
         $this->isStatic   = $isStatic;
     }
@@ -245,6 +245,18 @@ class PropertyNode
         return $this->type !== null;
     }
 
+    /**
+     * Check if type is nullable
+     *
+     * @return bool
+     */
+    public function isNullable(): bool
+    {
+        if (!$this->hasType()) return false;
+
+        return str_starts_with($this->type, "?") || str_contains($this->type, "|null");
+    }
+
     /*----------------------------------------*
      * Default Value
      *----------------------------------------*/
@@ -252,9 +264,9 @@ class PropertyNode
     /**
      * Default value
      *
-     * @var mixed
+     * @var string|int|float|bool|null
      */
-    protected mixed $defaultValue = null;
+    protected string|int|float|bool|null $defaultValue = null;
 
     /**
      * Whether has default value
@@ -266,9 +278,9 @@ class PropertyNode
     /**
      * Get default value
      *
-     * @return mixed
+     * @return string|int|float|bool|null
      */
-    public function defaultValue(): mixed
+    public function defaultValue(): string|int|float|bool|null
     {
         return $this->defaultValue;
     }
@@ -276,10 +288,10 @@ class PropertyNode
     /**
      * Set default value
      *
-     * @param mixed $defaultValue
+     * @param string|int|float|bool|null $defaultValue
      * @return static
      */
-    public function setDefaultValue(mixed $defaultValue): static
+    public function setDefaultValue(string|int|float|bool|null $defaultValue): static
     {
         $this->defaultValue = $defaultValue;
         $this->hasDefault   = true;

@@ -24,7 +24,7 @@ class VarTag extends PHPDocTag
      * @param string|null $name
      * @param string|null $description
      */
-    public function __construct(string $type, string|null $name = null, string|null $description = null)
+    public function __construct(string $type, string|null $name, string|null $description)
     {
         $this->type  = $type;
         $this->name  = $name ? ltrim($name, "$") : null;

@@ -24,7 +24,7 @@ class ParamTag extends PHPDocTag
      * @param string $type
      * @param string|null $description
      */
-    public function __construct(string $name, string $type, string|null $description = null)
+    public function __construct(string $name, string $type, string|null $description)
     {
         $this->name  = ltrim($name, "$");
         $this->type  = $type;

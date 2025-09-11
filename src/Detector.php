@@ -53,18 +53,22 @@ abstract class Detector implements DetectorContract
 
         if ($this->useGitignore) $this->loadGitignorePatterns($directory);
 
-        $phpFiles = $this->findPhpFiles($directory);
-
-        foreach ($phpFiles as $file) {
+        foreach ($this->getPhpFiles($directory) as $file) {
             $relativePath = $this->getRelativePath($file, $directory);
 
             $analyzer = new Analyzer();
 
-            $analyzer->setFile($file);
+            try {
+                $analyzer->setFile($file);
 
-            $this->check($analyzer, $relativePath);
+                $this->check($analyzer, $relativePath);
 
-            $this->filesChecked++;
+                $this->filesChecked++;
+            } catch (\Exception $e) {
+                $this->addError($relativePath, $e->getMessage());
+            }
+
+            unset($analyzer);
         }
 
         return empty($this->issues);
@@ -77,11 +81,12 @@ abstract class Detector implements DetectorContract
      */
     protected function reset(): void
     {
+        $this->gitignorePatterns = [];
+        $this->gitignoreCache    = [];
+
         $this->issues       = [];
         $this->filesChecked = 0;
-
-        $this->gitignorePatterns = [];
-        $this->gitignoreCache = [];
+        $this->errors       = [];
     }
 
     /*----------------------------------------*
@@ -161,7 +166,7 @@ abstract class Detector implements DetectorContract
     /**
      * Gitignore patterns
      *
-     * @var array<array{pattern: string, path: string, is_negation: bool}>
+     * @var array<array{pattern: string, path: string, is_negation: bool, regex: string|null}>
      */
     protected array $gitignorePatterns = [];
 
@@ -173,11 +178,19 @@ abstract class Detector implements DetectorContract
     protected array $gitignoreCache = [];
 
     /**
+     * Maximum cache size
+     *
+     * @var int
+     */
+    protected int $maxCacheSize = 10000;
+
+    /**
      * {@inheritDoc}
      */
     public function setUseGitignore(bool $useGitignore): static
     {
         $this->useGitignore = $useGitignore;
+
         return $this;
     }
 
@@ -203,6 +216,7 @@ abstract class Detector implements DetectorContract
     public function setPreloadGitignores(bool $preloadGitignores): static
     {
         $this->preloadGitignores = $preloadGitignores;
+
         return $this;
     }
 
@@ -240,32 +254,45 @@ abstract class Detector implements DetectorContract
 
             if (file_exists($gitignorePath)) $this->parseGitignoreFile($gitignorePath, $directory);
         }
+
+        foreach ($this->gitignorePatterns as &$entry) {
+            $entry["regex"] = $this->compileGitignorePattern($entry["pattern"]);
+        }
+
+        unset($entry);
     }
 
     /**
      * Load gitignore files recursively
      *
      * @param string $path
+     * @param int $depth
      * @return void
      */
-    protected function loadGitignoreRecursively(string $path): void
+    protected function loadGitignoreRecursively(string $path, int $depth = 0): void
     {
+        if ($depth > 20) return;
+
         $gitignorePath = $path . DIRECTORY_SEPARATOR . ".gitignore";
 
         if (file_exists($gitignorePath) && is_readable($gitignorePath)) $this->parseGitignoreFile($gitignorePath, $path);
 
-        $iterator = new \DirectoryIterator($path);
+        try {
+            $iterator = new \DirectoryIterator($path);
 
-        foreach ($iterator as $item) {
-            if ($item->isDot() || !$item->isDir()) continue;
+            foreach ($iterator as $item) {
+                if ($item->isDot() || !$item->isDir()) continue;
 
-            $dirName = $item->getFilename();
+                $dirName = $item->getFilename();
 
-            if (in_array($dirName, $this->excludeDirectories(), true)) continue;
+                if (in_array($dirName, $this->excludeDirectories(), true)) continue;
 
-            $subPath = $item->getPathname();
+                $subPath = $item->getPathname();
 
-            if (is_readable($subPath)) $this->loadGitignoreRecursively($subPath);
+                if (is_readable($subPath)) $this->loadGitignoreRecursively($subPath, $depth + 1);
+            }
+        } catch (\Exception $e) {
+            $this->addError($path, $e->getMessage());
         }
     }
 
@@ -278,7 +305,7 @@ abstract class Detector implements DetectorContract
      */
     protected function parseGitignoreFile(string $gitignorePath, string $basePath): void
     {
-        $content = file_get_contents($gitignorePath);
+        $content = @file_get_contents($gitignorePath);
 
         if ($content === false) return;
 
@@ -297,8 +324,49 @@ abstract class Detector implements DetectorContract
                 "pattern"     => $pattern,
                 "path"        => rtrim($basePath, DIRECTORY_SEPARATOR),
                 "is_negation" => $isNegation,
+                "regex"       => null,
             ];
         }
+    }
+
+    /**
+     * Compile gitignore pattern to regex
+     *
+     * @param string $pattern
+     * @return string|null
+     */
+    protected function compileGitignorePattern(string $pattern): ?string
+    {
+        if (empty($pattern)) return null;
+
+        $isDirectory = str_ends_with($pattern, "/");
+
+        if ($isDirectory) $pattern = rtrim($pattern, "/");
+
+        $isRootPattern = str_starts_with($pattern, "/");
+
+        if ($isRootPattern) $pattern = substr($pattern, 1);
+
+        $pattern = preg_quote($pattern, "#");
+
+        $pattern = str_replace("\\*\\*", "{{DOUBLE_STAR}}", $pattern);
+        $pattern = str_replace("\\*", "[^/]*", $pattern);
+        $pattern = str_replace("\\?", "[^/]", $pattern);
+        $pattern = str_replace("{{DOUBLE_STAR}}", ".*", $pattern);
+
+        if ($isRootPattern) {
+            $regex = "^" . $pattern;
+        } else {
+            $regex = "(^|/)" . $pattern;
+        }
+
+        if ($isDirectory) {
+            $regex .= "(/|$)";
+        } else {
+            $regex .= "($|/)";
+        }
+
+        return "#" . $regex . "#";
     }
 
     /**
@@ -313,98 +381,22 @@ abstract class Detector implements DetectorContract
 
         if (isset($this->gitignoreCache[$path])) return $this->gitignoreCache[$path];
 
+        if (count($this->gitignoreCache) > $this->maxCacheSize) $this->gitignoreCache = array_slice($this->gitignoreCache, - ($this->maxCacheSize / 2), null, true);
+
         $ignored = false;
 
         foreach ($this->gitignorePatterns as $entry) {
             if (!str_starts_with($path, $entry["path"])) continue;
 
             $relativePath = substr($path, strlen($entry["path"]) + 1);
+            $relativePath = str_replace(DIRECTORY_SEPARATOR, "/", $relativePath);
 
-            if ($this->matchesGitignorePattern($relativePath, $entry["pattern"])) $ignored = !$entry["is_negation"];
+            if ($entry["regex"] && @preg_match($entry["regex"], $relativePath)) $ignored = !$entry["is_negation"];
         }
 
         $this->gitignoreCache[$path] = $ignored;
 
         return $ignored;
-    }
-
-    /**
-     * Check if path matches gitignore pattern
-     *
-     * @param string $relativePath
-     * @param string $pattern
-     * @return bool
-     */
-    protected function matchesGitignorePattern(string $relativePath, string $pattern): bool
-    {
-        $relativePath = str_replace(DIRECTORY_SEPARATOR, "/", $relativePath);
-
-        $pattern = rtrim($pattern, "/");
-
-        $isDirectoryPattern = str_ends_with($pattern, "/");
-
-        if ($isDirectoryPattern) {
-            $pattern = rtrim($pattern, "/");
-
-            if ($relativePath === $pattern || str_starts_with($relativePath, $pattern . "/")) return true;
-        }
-
-        $isRootPattern = str_starts_with($pattern, "/");
-
-        if ($isRootPattern) {
-            $pattern = ltrim($pattern, "/");
-
-            if ($relativePath === $pattern) return true;
-
-            if (str_starts_with($relativePath, $pattern . "/")) return true;
-
-            return false;
-        }
-
-        if ($relativePath === $pattern) return true;
-
-        if (str_contains($pattern, "*") || str_contains($pattern, "?")) {
-            if (str_contains($pattern, "**")) {
-                $regexPattern = str_replace("**", "{{DOUBLE_STAR}}", $pattern);
-                $regexPattern = str_replace("*", "{{STAR}}", $regexPattern);
-                $regexPattern = str_replace("?", "{{QUESTION}}", $regexPattern);
-
-                $regexPattern = preg_quote($regexPattern, "#");
-                $regexPattern = str_replace("{{DOUBLE_STAR}}", ".*", $regexPattern);
-                $regexPattern = str_replace("{{STAR}}", "[^/]*", $regexPattern);
-                $regexPattern = str_replace("{{QUESTION}}", "[^/]", $regexPattern);
-
-                if (preg_match("#(^|/)" . $regexPattern . "($|/)#", $relativePath)) {
-                    return true;
-                }
-            } else {
-                if (fnmatch($pattern, $relativePath)) return true;
-
-                $pathParts = explode("/", $relativePath);
-                foreach ($pathParts as $i => $part) {
-                    $remainingPath = implode("/", array_slice($pathParts, $i));
-
-                    if (fnmatch($pattern, $remainingPath)) return true;
-                }
-            }
-
-            return false;
-        }
-
-        $pathParts = explode("/", $relativePath);
-
-        if (!str_contains($pattern, "/")) return in_array($pattern, $pathParts, true);
-
-        $patternParts  = explode("/", $pattern);
-        $patternLength = count($patternParts);
-
-        for ($i = 0; $i <= count($pathParts) - $patternLength; $i++) {
-            $pathSegment = implode("/", array_slice($pathParts, $i, $patternLength));
-
-            if ($pathSegment === $pattern) return true;
-        }
-
-        return false;
     }
 
     /*----------------------------------------*
@@ -426,6 +418,13 @@ abstract class Detector implements DetectorContract
     protected int $filesChecked = 0;
 
     /**
+     * Errors during detection
+     *
+     * @var array<string, string>
+     */
+    protected array $errors = [];
+
+    /**
      * {@inheritDoc}
      */
     public function issues(): array
@@ -442,6 +441,14 @@ abstract class Detector implements DetectorContract
     }
 
     /**
+     * {@inheritDoc}
+     */
+    public function errors(): array
+    {
+        return $this->errors;
+    }
+
+    /**
      * Add issue
      *
      * @param \Sentinel\Contracts\Issue $issue
@@ -452,51 +459,68 @@ abstract class Detector implements DetectorContract
         $this->issues[] = $issue;
     }
 
+    /**
+     * Add error message
+     *
+     * @param string $file
+     * @param string $message
+     * @return void
+     */
+    protected function addError(string $file, string $message): void
+    {
+        $this->errors[$file] = $message;
+    }
+
     /*----------------------------------------*
      * File Operations
      *----------------------------------------*/
 
     /**
-     * Find PHP files
+     * Get PHP files using generator for memory efficiency
      *
      * @param string $directory
-     * @return array<string>
+     * @return \Generator<string>
      */
-    protected function findPhpFiles(string $directory): array
+    protected function getPhpFiles(string $directory): \Generator
     {
-        $files = [];
-
         $excludeDirs = $this->excludeDirectories();
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS)
-        );
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveCallbackFilterIterator(
+                    new \RecursiveDirectoryIterator(
+                        $directory,
+                        \RecursiveDirectoryIterator::SKIP_DOTS | \RecursiveDirectoryIterator::FOLLOW_SYMLINKS
+                    ),
+                    function (\SplFileInfo $file) use ($excludeDirs) {
+                        if (!$file->isDir()) return true;
 
-        foreach ($iterator as $file) {
-            if (!$file->isFile()) continue;
+                        $dirName = $file->getFilename();
 
-            $path = $file->getRealPath();
+                        return !in_array($dirName, $excludeDirs, true);
+                    }
+                ),
+                \RecursiveIteratorIterator::SELF_FIRST
+            );
 
-            $excluded = false;
+            $iterator->setMaxDepth(100);
 
-            foreach ($excludeDirs as $excludeDir) {
-                if (!str_contains($path, DIRECTORY_SEPARATOR . $excludeDir . DIRECTORY_SEPARATOR)) continue;
+            foreach ($iterator as $file) {
+                if (!$file->isFile()) continue;
 
-                $excluded = true;
+                $path = $file->getRealPath();
 
-                break;
+                if ($path === false) continue;
+
+                if ($file->getExtension() !== "php") continue;
+
+                if ($this->useGitignore && $this->isGitignored($path)) continue;
+
+                yield $path;
             }
-
-            if ($excluded) continue;
-
-            if ($this->useGitignore && $this->isGitignored($path)) continue;
-
-            if (pathinfo($path, PATHINFO_EXTENSION) === "php") $files[] = $path;
+        } catch (\Exception $e) {
+            $this->addError($directory, $e->getMessage());
         }
-
-        sort($files);
-
-        return $files;
     }
 
     /**
@@ -512,6 +536,20 @@ abstract class Detector implements DetectorContract
 
         if (str_starts_with($filePath, $baseDirectory)) return substr($filePath, strlen($baseDirectory));
 
-        return $filePath;
+        $fileParts = explode(DIRECTORY_SEPARATOR, $filePath);
+        $baseParts = explode(DIRECTORY_SEPARATOR, rtrim($baseDirectory, DIRECTORY_SEPARATOR));
+
+        $commonLength = 0;
+        for ($i = 0; $i < min(count($fileParts), count($baseParts)); $i++) {
+            if ($fileParts[$i] !== $baseParts[$i]) break;
+
+            $commonLength++;
+        }
+
+        $upCount       = count($baseParts) - $commonLength;
+        $relativeParts = array_fill(0, $upCount, "..");
+        $relativeParts = array_merge($relativeParts, array_slice($fileParts, $commonLength));
+
+        return implode(DIRECTORY_SEPARATOR, $relativeParts);
     }
 }

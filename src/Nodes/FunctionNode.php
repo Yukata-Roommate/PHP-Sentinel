@@ -23,11 +23,11 @@ class FunctionNode
      *
      * @param int $line
      * @param string $name
-     * @param string $visibility
+     * @param string|null $visibility
      * @param bool $isStatic
      * @param array<string, \Sentinel\Nodes\Leaves\Parameter> $parameters
      */
-    public function __construct(int $line, string $name, string $visibility, bool $isStatic, array $parameters)
+    public function __construct(int $line, string $name, string|null $visibility, bool $isStatic, array $parameters)
     {
         $this->line       = $line;
         $this->name       = $name;
@@ -85,16 +85,16 @@ class FunctionNode
     /**
      * Visibility
      *
-     * @var string
+     * @var string|null
      */
-    protected string $visibility;
+    protected string|null $visibility;
 
     /**
      * Get visibility
      *
-     * @return string
+     * @return string|null
      */
-    public function visibility(): string
+    public function visibility(): string|null
     {
         return $this->visibility;
     }
@@ -106,7 +106,7 @@ class FunctionNode
      */
     public function isPublic(): bool
     {
-        return $this->visibility === "public";
+        return $this->visibility === "public" || $this->visibility === null;
     }
 
     /**
@@ -134,14 +134,14 @@ class FunctionNode
      *----------------------------------------*/
 
     /**
-     * Whether property is static
+     * Whether function is static
      *
      * @var bool
      */
     protected bool $isStatic;
 
     /**
-     * Check if property is static
+     * Check if function is static
      *
      * @return bool
      */
@@ -179,7 +179,7 @@ class FunctionNode
      */
     public function parameter(string $name): Parameter|null
     {
-        return $this->parameters[$name] ?? null;
+        return $this->parameters[ltrim($name, "$")] ?? null;
     }
 
     /*----------------------------------------*
@@ -305,7 +305,7 @@ class FunctionNode
      * @param \Sentinel\Nodes\PHPDocNode|null $phpDoc
      * @return static
      */
-    public function setPhpDoc(PHPDocNode|null $phpDoc): static
+    public function setPHPDoc(PHPDocNode|null $phpDoc): static
     {
         $this->phpDoc = $phpDoc;
 

@@ -33,7 +33,7 @@ class Parser implements ParserContract
     {
         if (empty($lines)) return;
 
-        $this->lines = $lines;
+        $this->lines = array_values($lines);
 
         $this->parse();
     }
@@ -78,14 +78,70 @@ class Parser implements ParserContract
     protected int $classBraceLevel = 0;
 
     /**
+     * Function brace level stack
+     *
+     * @var array<int>
+     */
+    protected array $functionBraceLevels = [];
+
+    /**
+     * In multiline declaration
+     *
+     * @var bool
+     */
+    protected bool $inMultilineDeclaration = false;
+
+    /**
+     * Multiline buffer
+     *
+     * @var string
+     */
+    protected string $multilineBuffer = "";
+
+    /**
+     * Multiline start line
+     *
+     * @var int
+     */
+    protected int $multilineStartLine = 0;
+
+    /**
      * Parse lines
      *
      * @return void
      */
     protected function parse(): void
     {
-        foreach ($this->lines as $lineNum => $line) {
-            $lineNumber = $lineNum + 1;
+        $totalLines = count($this->lines);
+
+        for ($i = 0; $i < $totalLines; $i++) {
+            $line = $this->lines[$i];
+            $lineNumber = $i + 1;
+
+            if ($this->inMultilineDeclaration) {
+                $this->multilineBuffer .= " " . trim($line);
+
+                if ($this->isMultilineEnd($line)) {
+                    $this->processMultilineLine($this->multilineBuffer, $this->multilineStartLine);
+
+                    $this->inMultilineDeclaration = false;
+                    $this->multilineBuffer        = "";
+                }
+
+                $this->updateBraceLevel($line);
+
+                continue;
+            }
+
+            if ($this->isMultilineStart($line)) {
+                $this->inMultilineDeclaration = true;
+                $this->multilineBuffer        = trim($line);
+                $this->multilineStartLine     = $lineNumber;
+
+                $this->updateBraceLevel($line);
+
+                continue;
+            }
 
             $this->updateBraceLevel($line);
             $this->parseStrictTypes($line);
@@ -100,6 +156,57 @@ class Parser implements ParserContract
     }
 
     /**
+     * Check if line starts a multiline declaration
+     *
+     * @param string $line
+     * @return bool
+     */
+    protected function isMultilineStart(string $line): bool
+    {
+        if (preg_match("/^\s*(?:public|private|protected|static|abstract|final)*\s*function\s+\w+\s*\(/", $line)) return substr_count($line, "(") > substr_count($line, ")");
+
+        if (preg_match("/^\s*(?:abstract|final)?\s*class\s+\w+/", $line)) return !str_contains($line, "{");
+
+        return false;
+    }
+
+    /**
+     * Check if line ends a multiline declaration
+     *
+     * @param string $line
+     * @return bool
+     */
+    protected function isMultilineEnd(string $line): bool
+    {
+        if (str_contains($this->multilineBuffer, "function")) {
+            $openParen  = substr_count($this->multilineBuffer, "(");
+            $closeParen = substr_count($this->multilineBuffer, ")");
+
+            if ($openParen === $closeParen && $openParen > 0) return preg_match("/[)]\s*(?::\s*[\w\\\|?]+)?\s*(?:\{|;|$)/", $line) === 1;
+        }
+
+        if (str_contains($this->multilineBuffer, "class")) return str_contains($line, "{");
+
+        return false;
+    }
+
+    /**
+     * Process multiline declaration
+     *
+     * @param string $fullLine
+     * @param int $lineNumber
+     * @return void
+     */
+    protected function processMultilineLine(string $fullLine, int $lineNumber): void
+    {
+        if (str_contains($fullLine, "function")) {
+            $this->parseFunctionNode($fullLine, $lineNumber);
+        } elseif (str_contains($fullLine, "class")) {
+            $this->parseClassNode($fullLine, $lineNumber);
+        }
+    }
+
+    /**
      * Update brace level
      *
      * @param string $line
@@ -107,7 +214,27 @@ class Parser implements ParserContract
      */
     protected function updateBraceLevel(string $line): void
     {
-        $this->braceLevel += substr_count($line, "{") - substr_count($line, "}");
+        $cleanLine = $this->removeStringsAndComments($line);
+
+        $this->braceLevel += substr_count($cleanLine, "{") - substr_count($cleanLine, "}");
+    }
+
+    /**
+     * Remove strings and comments from line
+     *
+     * @param string $line
+     * @return string
+     */
+    protected function removeStringsAndComments(string $line): string
+    {
+        $line = preg_replace("~//.*~", "", $line);
+
+        $line = preg_replace("~/\*.*?\*/~s", "", $line);
+
+        $line = preg_replace('/"(?:[^"\\\\]|\\\\.)*"/', '""', $line);
+        $line = preg_replace("/'(?:[^'\\\\]|\\\\.)*'/", "''", $line);
+
+        return $line;
     }
 
     /**
@@ -120,12 +247,12 @@ class Parser implements ParserContract
     {
         if (!$this->inClass) return;
 
-        if ($this->braceLevel > $this->classBraceLevel) return;
+        if ($this->braceLevel <= $this->classBraceLevel) {
+            if ($this->currentClass !== null) $this->currentClass->setEnd($lineNumber);
 
-        if ($this->currentClass !== null) $this->currentClass->setEnd($lineNumber);
-
-        $this->inClass      = false;
-        $this->currentClass = null;
+            $this->inClass      = false;
+            $this->currentClass = null;
+        }
     }
 
     /**
@@ -141,15 +268,13 @@ class Parser implements ParserContract
         $endLine = 0;
         $inDoc = false;
 
-        for ($i = $lineNumber - 1; $i >= 1; $i--) {
-            $line = $this->lines[$i - 1] ?? null;
-
-            if ($line === null) continue;
+        for ($i = $lineNumber - 2; $i >= 0; $i--) {
+            $line = $this->lines[$i];
 
             if (!$inDoc) {
                 if (preg_match("/^\s*\*\/\s*$/", $line)) {
                     $inDoc   = true;
-                    $endLine = $i;
+                    $endLine = $i + 1;
 
                     array_unshift($phpDocLines, $line);
                 } elseif (!preg_match("/^\s*$/", $line)) {
@@ -159,7 +284,7 @@ class Parser implements ParserContract
                 array_unshift($phpDocLines, $line);
 
                 if (preg_match("/^\s*\/\*\*/", $line)) {
-                    $startLine = $i;
+                    $startLine = $i + 1;
 
                     break;
                 }
@@ -267,6 +392,23 @@ class Parser implements ParserContract
      */
     protected function parseUseNode(string $line, int $lineNumber): void
     {
+        if (preg_match("/^\s*use\s+([a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)\\\\\{([^}]+)\}/", $line, $matches)) {
+            $namespace = $matches[1];
+            $items     = explode(",", $matches[2]);
+
+            foreach ($items as $item) {
+                $item = trim($item);
+
+                if (preg_match("/^([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+as\s+([a-zA-Z_][a-zA-Z0-9_]*))?$/", $item, $itemMatches)) {
+                    $fullName = $namespace . "\\" . $itemMatches[1];
+                    $alias    = $itemMatches[2] ?? null;
+
+                    $this->uses[] = new UseNode($lineNumber, $fullName, $alias);
+                }
+            }
+            return;
+        }
+
         if (!preg_match("/^\s*use\s+([a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*(?:\\\\[a-zA-Z_][a-zA-Z0-9_]*)*)\s*(?:as\s+([a-zA-Z_][a-zA-Z0-9_]*))?\s*;/", $line, $matches)) return;
 
         $fullName = $matches[1];
@@ -305,8 +447,10 @@ class Parser implements ParserContract
     {
         if (!preg_match("/^\s*(?:(abstract|final)\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)/", $line, $matches)) return;
 
+        if ($this->inClass && $this->braceLevel > $this->classBraceLevel) return;
+
         $this->inClass         = true;
-        $this->classBraceLevel = $this->braceLevel - 1;
+        $this->classBraceLevel = $this->braceLevel;
 
         $name     = $matches[2];
         $modifier = $matches[1] ?? null;
@@ -347,10 +491,9 @@ class Parser implements ParserContract
      */
     protected function addImplementsToClassNode(ClassNode $class, string $line): void
     {
-        if (!preg_match("/implements\s+(.+)/", $line, $matches)) return;
+        if (!preg_match("/implements\s+(.+?)(?:\s*\{|$)/", $line, $matches)) return;
 
-        $interfacesList = preg_replace("/\s*\{\s*$/", "", trim($matches[1]));
-        $interfaces     = preg_split("/,\s*/", $interfacesList);
+        $interfaces = preg_split("/,\s*/", trim($matches[1]));
 
         foreach ($interfaces as $interface) {
             $interface = trim($interface);
@@ -414,9 +557,13 @@ class Parser implements ParserContract
      */
     protected function isPropertyLine(string $line): bool
     {
-        if (!preg_match("/^\s*(public|private|protected)\s+/", $line)) return false;
+        if (!preg_match("/^\s*(public|private|protected|var|static)\s+/", $line)) return false;
+
         if (preg_match("/\s+function\s+/", $line)) return false;
+
         if (preg_match("/\s+const\s+/", $line)) return false;
+
+        if (!preg_match("/\$/", $line)) return false;
 
         return true;
     }
@@ -443,7 +590,7 @@ class Parser implements ParserContract
      */
     protected function setTypeToPropertyNode(PropertyNode $property, string $line): void
     {
-        if (!preg_match("/(public|private|protected)\s+(?:static\s+)?(\??[a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)\s+\$/", $line, $matches)) return;
+        if (!preg_match("/(public|private|protected|var)\s+(?:static\s+)?(\??(?:[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*(?:\|[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)*))\s+\$/", $line, $matches)) return;
 
         $type = $matches[2];
 
@@ -497,7 +644,7 @@ class Parser implements ParserContract
         if (!preg_match("/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/", $line, $matches)) return;
 
         $name       = $matches[3];
-        $visibility = $matches[1] ?? "public";
+        $visibility = $matches[1] ?? ($this->inClass ? "public" : null);
         $isStatic   = !empty($matches[2]);
         $params     = $this->parseFunctionParameters($matches[4]);
 
@@ -520,26 +667,58 @@ class Parser implements ParserContract
     {
         if (trim($paramString) === "") return [];
 
-        $params = preg_split("/,(?![^<>]*>)/", $paramString);
-
+        $params     = $this->splitParameters($paramString);
         $parameters = [];
 
         foreach ($params as $param) {
             $part = trim($param);
 
-            if (!preg_match("/(?:(\?)?([a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)\s+)?(?:\.\.\.)?(?:&)?\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=\s*(.*))?/", $part, $matches)) continue;
+            if (!preg_match("/(?:(\?)?([a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*(?:<[^>]+>)?)\s+)?(?:(\.\.\.))?\s*(?:(&))?\s*\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=\s*(.*))?/", $part, $matches)) continue;
 
-            $name         = $matches[3];
+            $name         = $matches[5];
             $isNullable   = !empty($matches[1]);
             $type         = $matches[2] ?? null;
-            $defaultValue = $matches[4] ?? null;
-            $isVariadic   = str_contains($part, "...");
-            $isReference  = str_contains($part, "&");
+            $isVariadic   = !empty($matches[3]);
+            $isReference  = !empty($matches[4]);
+            $defaultValue = $matches[6] ?? null;
 
             $parameters[$name] = new Parameter($name, $isNullable, $type, $defaultValue, $isVariadic, $isReference);
         }
 
         return $parameters;
+    }
+
+    /**
+     * Split parameters handling nested generics
+     *
+     * @param string $paramString
+     * @return array<string>
+     */
+    protected function splitParameters(string $paramString): array
+    {
+        $params = [];
+        $current = "";
+        $depth = 0;
+
+        for ($i = 0; $i < strlen($paramString); $i++) {
+            $char = $paramString[$i];
+
+            if ($char === "<") {
+                $depth++;
+            } elseif ($char === ">") {
+                $depth--;
+            } elseif ($char === "," && $depth === 0) {
+                $params[] = $current;
+                $current = "";
+                continue;
+            }
+
+            $current .= $char;
+        }
+
+        if ($current !== "") $params[] = $current;
+
+        return $params;
     }
 
     /**
@@ -564,7 +743,7 @@ class Parser implements ParserContract
      */
     protected function setReturnTypeToFunctionNode(FunctionNode $function, string $line): void
     {
-        if (!preg_match("/\)\s*:\s*(\??[a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*)/", $line, $matches)) return;
+        if (!preg_match("/\)\s*:\s*(\??(?:[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*(?:\|[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)*))/", $line, $matches)) return;
 
         $returnType = $matches[1];
 

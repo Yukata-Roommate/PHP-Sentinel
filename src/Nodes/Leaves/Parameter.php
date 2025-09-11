@@ -21,13 +21,13 @@ class Parameter
      * @param string $name
      * @param bool $isNullable
      * @param string|null $type
-     * @param mixed $defaultValue
+     * @param string|null $defaultValue
      * @param bool $isVariadic
      * @param bool $isReference
      */
-    public function __construct(string $name, bool $isNullable, string|null $type, mixed $defaultValue, bool $isVariadic, bool $isReference)
+    public function __construct(string $name, bool $isNullable, string|null $type, string|null $defaultValue, bool $isVariadic, bool $isReference)
     {
-        $this->name         = $name;
+        $this->name         = ltrim($name, "$");
         $this->isNullable   = $isNullable;
         $this->type         = $type;
         $this->defaultValue = $defaultValue;
@@ -104,16 +104,16 @@ class Parameter
     /**
      * Default value
      *
-     * @var mixed
+     * @var string|null
      */
     protected $defaultValue;
 
     /**
      * Get default value
      *
-     * @return mixed
+     * @return string|null
      */
-    public function defaultValue(): mixed
+    public function defaultValue(): string|null
     {
         return $this->defaultValue;
     }
