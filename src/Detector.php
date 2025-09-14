@@ -9,7 +9,7 @@ use Sentinel\Contracts\Detector as DetectorContract;
 use Sentinel\Contracts\Analyzer as AnalyzerContract;
 use Sentinel\Analyzer;
 
-use Sentinel\Contracts\Issue;
+use Sentinel\Issue;
 
 use Sentinel\Exceptions\DirectoryNotFoundException;
 
@@ -451,12 +451,14 @@ abstract class Detector implements DetectorContract
     /**
      * Add issue
      *
-     * @param \Sentinel\Contracts\Issue $issue
+     * @param string $file
+     * @param int $line
+     * @param string $message
      * @return void
      */
-    protected function addIssue(Issue $issue): void
+    protected function addIssue(string $file, int $line, string $message): void
     {
-        $this->issues[] = $issue;
+        $this->issues[] = new Issue($file, $line, $message);
     }
 
     /**
