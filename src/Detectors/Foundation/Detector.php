@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Sentinel;
+namespace Sentinel\Detectors\Foundation;
 
 use Sentinel\Contracts\Detector as DetectorContract;
 
@@ -16,7 +16,7 @@ use Sentinel\Exceptions\DirectoryNotFoundException;
 /**
  * Detector
  *
- * @package Sentinel
+ * @package Sentinel\Detectors\Foundation
  */
 abstract class Detector implements DetectorContract
 {
