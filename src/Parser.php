@@ -182,7 +182,7 @@ class Parser implements ParserContract
             $openParen  = substr_count($this->multilineBuffer, "(");
             $closeParen = substr_count($this->multilineBuffer, ")");
 
-            if ($openParen === $closeParen && $openParen > 0) return preg_match("/[)]\s*(?::\s*[\w\\\|?]+)?\s*(?:\{|;|$)/", $line) === 1;
+            if ($openParen === $closeParen && $openParen > 0) return preg_match("/[)]\s*(?::\s*(?:\?)?[a-zA-Z0-9_\\\|&()]+)?\s*(?:\{|;|$)/", $line) === 1;
         }
 
         if (str_contains($this->multilineBuffer, "class")) return str_contains($line, "{");
@@ -546,7 +546,10 @@ class Parser implements ParserContract
         $name       = $matches[1];
         $visibility = preg_match("/(public|private|protected)/", $line, $matches) ? $matches[1] : "public";
         $isStatic   = str_contains($line, "static");
-        $isReadonly = str_contains($line, "readonly");
+
+        $hasReadonlyBefore = preg_match("/^\s*readonly\s+(?:public|private|protected)/", $line);
+        $hasReadonlyAfter = preg_match("/^\s*(?:public|private|protected)\s+readonly/", $line);
+        $isReadonly = $hasReadonlyBefore || $hasReadonlyAfter || str_contains($line, "readonly");
 
         $property = new PropertyNode($lineNumber, $name, $visibility, $isStatic, $isReadonly);
 
@@ -598,7 +601,7 @@ class Parser implements ParserContract
      */
     protected function setTypeToPropertyNode(PropertyNode $property, string $line): void
     {
-        if (!preg_match("/(?:(?:public|private|protected|readonly)\s+){1,2}((?:\?)?[a-zA-Z0-9_\\\|&()]+)\s+\$/", $line, $matches)) return;
+        if (!preg_match("/(?:(?:public|private|protected|var)\s+)?(?:readonly\s+)?(?:static\s+)?(?:readonly\s+)?((?:\?)?[a-zA-Z0-9_\\\|&()]+)\s+\$/", $line, $matches)) return;
 
         $type = $matches[1];
 
@@ -656,7 +659,7 @@ class Parser implements ParserContract
      */
     protected function parseFunctionNode(string $line, int $lineNumber): void
     {
-        if (!preg_match("/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)/", $line, $matches)) return;
+        if (!preg_match("/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/", $line, $matches)) return;
 
         $this->currentFunctionName = $matches[3];
 
