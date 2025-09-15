@@ -445,17 +445,24 @@ class Parser implements ParserContract
      */
     protected function parseClassNode(string $line, int $lineNumber): void
     {
-        if (!preg_match("/^\s*(?:(abstract|final)\s+)?class\s+([a-zA-Z_][a-zA-Z0-9_]*)/", $line, $matches)) return;
+        if (!preg_match('/^\s*(?:(abstract|final|readonly)\s+)?(class|interface|trait|enum)\s+([a-zA-Z_][a-zA-Z0-9_]*)/', $line, $matches)) return;
 
         if ($this->inClass && $this->braceLevel > $this->classBraceLevel) return;
 
         $this->inClass         = true;
         $this->classBraceLevel = $this->braceLevel;
 
-        $name     = $matches[2];
         $modifier = $matches[1] ?? null;
+        $type     = $matches[2];
+        $name     = $matches[3];
 
-        $class = new ClassNode($name, $lineNumber, $modifier);
+        $isReadonly = $modifier === "readonly";
+
+        if ($isReadonly) $modifier = null;
+
+        $class = new ClassNode($name, $lineNumber, $modifier, $type);
+
+        if ($isReadonly) $class->setIsReadonly(true);
 
         $class->setNamespace($this->namespace);
 
@@ -539,8 +546,9 @@ class Parser implements ParserContract
         $name       = $matches[1];
         $visibility = preg_match("/(public|private|protected)/", $line, $matches) ? $matches[1] : "public";
         $isStatic   = str_contains($line, "static");
+        $isReadonly = str_contains($line, "readonly");
 
-        $property = new PropertyNode($lineNumber, $name, $visibility, $isStatic);
+        $property = new PropertyNode($lineNumber, $name, $visibility, $isStatic, $isReadonly);
 
         $this->setClassNameToPropertyNode($property);
         $this->setTypeToPropertyNode($property, $line);
@@ -557,7 +565,7 @@ class Parser implements ParserContract
      */
     protected function isPropertyLine(string $line): bool
     {
-        if (!preg_match("/^\s*(public|private|protected|var|static)\s+/", $line)) return false;
+        if (!preg_match("/^\s*(public|private|protected|var|static|readonly)\s+/", $line)) return false;
 
         if (preg_match("/\s+function\s+/", $line)) return false;
 
@@ -590,9 +598,9 @@ class Parser implements ParserContract
      */
     protected function setTypeToPropertyNode(PropertyNode $property, string $line): void
     {
-        if (!preg_match("/(public|private|protected|var)\s+(?:static\s+)?(\??(?:[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*(?:\|[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)*))\s+\$/", $line, $matches)) return;
+        if (!preg_match('/(?:(?:public|private|protected|readonly)\s+){1,2}((?:\?)?[a-zA-Z0-9_\\\|&()]+)\s+\$/', $line, $matches)) return;
 
-        $type = $matches[2];
+        $type = $matches[1];
 
         $property->setType($type);
     }
@@ -625,6 +633,13 @@ class Parser implements ParserContract
     protected array $functions = [];
 
     /**
+     * Current function name
+     *
+     * @var string|null
+     */
+    protected string|null $currentFunctionName = null;
+
+    /**
      * {@inheritDoc}
      */
     public function functions(): array
@@ -641,7 +656,9 @@ class Parser implements ParserContract
      */
     protected function parseFunctionNode(string $line, int $lineNumber): void
     {
-        if (!preg_match("/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/", $line, $matches)) return;
+        if (!preg_match('/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)/', $line, $matches)) return;
+
+        $this->currentFunctionName = $matches[3];
 
         $name       = $matches[3];
         $visibility = $matches[1] ?? ($this->inClass ? "public" : null);
@@ -670,19 +687,24 @@ class Parser implements ParserContract
         $params     = $this->splitParameters($paramString);
         $parameters = [];
 
+        $isConstructor = $this->currentFunctionName === "__construct";
+
         foreach ($params as $param) {
             $part = trim($param);
 
-            if (!preg_match("/(?:(\?)?([a-zA-Z_\\\\][a-zA-Z0-9_\\\\|]*(?:<[^>]+>)?)\s+)?(?:(\.\.\.))?\s*(?:(&))?\s*\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=\s*(.*))?/", $part, $matches)) continue;
+            if (!preg_match("/(?:(public|private|protected|readonly)\s+)?(?:(\?)?([a-zA-Z0-9_\\\|&()]+)\s+)?(?:(\.\.\.))?\s*(?:(&))?\s*\$([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*=\s*(.*))?/", $part, $matches)) continue;
 
-            $name         = $matches[5];
-            $isNullable   = !empty($matches[1]);
-            $type         = $matches[2] ?? null;
-            $isVariadic   = !empty($matches[3]);
-            $isReference  = !empty($matches[4]);
-            $defaultValue = $matches[6] ?? null;
+            $promotionModifier = $matches[1] ?? null;
+            $isNullable        = !empty($matches[2]);
+            $type              = $matches[3] ?? null;
+            $isVariadic        = !empty($matches[4]);
+            $isReference       = !empty($matches[5]);
+            $name              = $matches[6];
+            $defaultValue      = $matches[7] ?? null;
 
-            $parameters[$name] = new Parameter($name, $isNullable, $type, $defaultValue, $isVariadic, $isReference);
+            $isPromoted = $promotionModifier !== null && $isConstructor && $this->currentClass !== null;
+
+            $parameters[$name] = new Parameter($name, $isNullable, $type, $defaultValue, $isVariadic, $isReference, $isPromoted);
         }
 
         return $parameters;
@@ -696,9 +718,10 @@ class Parser implements ParserContract
      */
     protected function splitParameters(string $paramString): array
     {
-        $params = [];
-        $current = "";
-        $depth = 0;
+        $params     = [];
+        $current    = "";
+        $depth      = 0;
+        $parenDepth = 0;
 
         for ($i = 0; $i < strlen($paramString); $i++) {
             $char = $paramString[$i];
@@ -707,7 +730,11 @@ class Parser implements ParserContract
                 $depth++;
             } elseif ($char === ">") {
                 $depth--;
-            } elseif ($char === "," && $depth === 0) {
+            } elseif ($char === "(") {
+                $parenDepth++;
+            } elseif ($char === ")") {
+                $parenDepth--;
+            } elseif ($char === "," && $depth === 0 && $parenDepth === 0) {
                 $params[] = $current;
                 $current = "";
                 continue;
@@ -743,7 +770,7 @@ class Parser implements ParserContract
      */
     protected function setReturnTypeToFunctionNode(FunctionNode $function, string $line): void
     {
-        if (!preg_match("/\)\s*:\s*(\??(?:[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*(?:\|[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*)*))/", $line, $matches)) return;
+        if (!preg_match('/\)\s*:\s*((?:\?)?[a-zA-Z0-9_\\\|&()]+)/', $line, $matches)) return;
 
         $returnType = $matches[1];
 

@@ -23,12 +23,14 @@ class ClassNode
      * @param string $name
      * @param int $startLine
      * @param string|null $modifier
+     * @param string $type
      */
-    public function __construct(string $name, int $startLine, string|null $modifier)
+    public function __construct(string $name, int $startLine, string|null $modifier, string $type)
     {
         $this->name     = $name;
         $this->start    = $startLine;
         $this->modifier = $modifier;
+        $this->type     = $type;
     }
 
     /*----------------------------------------*
@@ -154,6 +156,101 @@ class ClassNode
     public function isFinal(): bool
     {
         return $this->modifier === "final";
+    }
+
+    /*----------------------------------------*
+     * Type
+     *----------------------------------------*/
+
+    /**
+     * Type
+     *
+     * @var string
+     */
+    protected string $type;
+
+    /**
+     * Get type
+     *
+     * @return string
+     */
+    public function type(): string
+    {
+        return $this->type;
+    }
+
+    /**
+     * Check if is class
+     *
+     * @return bool
+     */
+    public function isClass(): bool
+    {
+        return $this->type === "class";
+    }
+
+    /**
+     * Check if is interface
+     *
+     * @return bool
+     */
+    public function isInterface(): bool
+    {
+        return $this->type === "interface";
+    }
+
+    /**
+     * Check if is trait
+     *
+     * @return bool
+     */
+    public function isTrait(): bool
+    {
+        return $this->type === "trait";
+    }
+
+    /**
+     * Check if is enum
+     *
+     * @return bool
+     */
+    public function isEnum(): bool
+    {
+        return $this->type === "enum";
+    }
+
+    /*----------------------------------------*
+     * Readonly
+     *----------------------------------------*/
+
+    /**
+     * Whether property is readonly
+     *
+     * @var bool
+     */
+    protected bool $isReadonly = false;
+
+    /**
+     * Check if property is readonly
+     *
+     * @return bool
+     */
+    public function isReadonly(): bool
+    {
+        return $this->isReadonly;
+    }
+
+    /**
+     * Set readonly
+     *
+     * @param bool $isReadonly
+     * @return static
+     */
+    public function setIsReadonly(bool $isReadonly): static
+    {
+        $this->isReadonly = $isReadonly;
+
+        return $this;
     }
 
     /*----------------------------------------*

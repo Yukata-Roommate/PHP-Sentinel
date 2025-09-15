@@ -24,13 +24,15 @@ class PropertyNode
      * @param string $name
      * @param string $visibility
      * @param bool $isStatic
+     * @param bool $isReadonly
      */
-    public function __construct(int $line, string $name, string $visibility, bool $isStatic)
+    public function __construct(int $line, string $name, string $visibility, bool $isStatic, bool $isReadonly)
     {
         $this->line       = $line;
         $this->name       = ltrim($name, "$");
         $this->visibility = $visibility;
         $this->isStatic   = $isStatic;
+        $this->isReadonly = $isReadonly;
     }
 
     /*----------------------------------------*
@@ -158,6 +160,27 @@ class PropertyNode
     }
 
     /*----------------------------------------*
+     * Readonly
+     *----------------------------------------*/
+
+    /**
+     * Whether property is readonly
+     *
+     * @var bool
+     */
+    protected bool $isReadonly;
+
+    /**
+     * Check if property is readonly
+     *
+     * @return bool
+     */
+    public function isReadonly(): bool
+    {
+        return $this->isReadonly;
+    }
+
+    /*----------------------------------------*
      * Class Name
      *----------------------------------------*/
 
@@ -255,6 +278,36 @@ class PropertyNode
         if (!$this->hasType()) return false;
 
         return str_starts_with($this->type, "?") || str_contains($this->type, "|null");
+    }
+
+    /**
+     * Check if type is union type
+     *
+     * @return bool
+     */
+    public function isUnionType(): bool
+    {
+        return $this->hasType() && str_contains($this->type, "|");
+    }
+
+    /**
+     * Check if type is intersection type
+     *
+     * @return bool
+     */
+    public function isIntersectionType(): bool
+    {
+        return $this->hasType() && str_contains($this->type, "&");
+    }
+
+    /**
+     * Check if type is Disjunctive Normal Form type
+     *
+     * @return bool
+     */
+    public function isDNFType(): bool
+    {
+        return $this->hasType() && preg_match("/\([\w\\\|&]+\)/", $this->type) === 1;
     }
 
     /*----------------------------------------*

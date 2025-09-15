@@ -182,6 +182,22 @@ class FunctionNode
         return $this->parameters[ltrim($name, "$")] ?? null;
     }
 
+    /**
+     * Check if is constructor with property promotion
+     *
+     * @return bool
+     */
+    public function hasPromotedProperties(): bool
+    {
+        if ($this->name !== "__construct") return false;
+
+        foreach ($this->parameters as $parameter) {
+            if ($parameter->isPromoted()) return true;
+        }
+
+        return false;
+    }
+
     /*----------------------------------------*
      * Class Name
      *----------------------------------------*/
