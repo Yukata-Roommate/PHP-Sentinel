@@ -49,7 +49,7 @@ class CyclomaticComplexityDetector extends StructureDetector
                 $relativePath,
                 $function->line(),
                 sprintf(
-                    "Function \"%s\" has cyclomatic complexity of %d (max: %d)",
+                    "Function \"%s\" has cyclomatic complexity of %d. (max: %d)",
                     $function->classFunctionName(),
                     $complexity,
                     $this->maxComplexity

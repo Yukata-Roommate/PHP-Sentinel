@@ -71,7 +71,7 @@ class ReturnDocDetector extends DocumentationDetector
                 $relativePath,
                 $phpDoc->start(),
                 sprintf(
-                    "Missing @return tag for %s \"%s\"",
+                    "Missing @return tag for %s \"%s\".",
                     $function->className() ? "method" : "function",
                     $function->classFunctionName()
                 )

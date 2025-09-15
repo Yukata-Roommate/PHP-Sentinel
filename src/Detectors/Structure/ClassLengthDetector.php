@@ -49,7 +49,7 @@ class ClassLengthDetector extends StructureDetector
                 $relativePath,
                 $class->start(),
                 sprintf(
-                    "Class \"%s\" is too long (%d lines, max: %d)",
+                    "Class \"%s\" is too long. (%d lines, max: %d)",
                     $class->name(),
                     $lineCount,
                     $this->maxClassLength
@@ -70,7 +70,7 @@ class ClassLengthDetector extends StructureDetector
                 $relativePath,
                 $function->line(),
                 sprintf(
-                    "Method \"%s\" is too long (%d lines, max: %d)",
+                    "Method \"%s\" is too long. (%d lines, max: %d)",
                     $function->classFunctionName(),
                     $methodLength,
                     $this->maxMethodLength

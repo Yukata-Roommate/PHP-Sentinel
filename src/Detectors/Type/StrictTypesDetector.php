@@ -47,7 +47,7 @@ class StrictTypesDetector extends TypeDetector
         $this->addIssue(
             $relativePath,
             1,
-            "Missing declare(strict_types=1) declaration"
+            "Missing declare(strict_types=1) declaration."
         );
     }
 }

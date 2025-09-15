@@ -47,7 +47,7 @@ class NamespaceDetector extends StructureDetector
         $this->addIssue(
             $relativePath,
             1,
-            'Missing namespace declaration'
+            'Missing namespace declaration.'
         );
     }
 }
