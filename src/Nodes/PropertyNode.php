@@ -307,7 +307,7 @@ class PropertyNode
      */
     public function isDNFType(): bool
     {
-        return $this->hasType() && preg_match("/\([\w\\\|&]+\)/", $this->type) === 1;
+        return $this->hasType() && preg_match('/\([^()]+[|&][^()]+\)/', $this->type) === 1;
     }
 
     /*----------------------------------------*
