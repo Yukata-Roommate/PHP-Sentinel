@@ -445,7 +445,7 @@ class Parser implements ParserContract
      */
     protected function parseClassNode(string $line, int $lineNumber): void
     {
-        if (!preg_match('/^\s*(?:(abstract|final|readonly)\s+)?(class|interface|trait|enum)\s+([a-zA-Z_][a-zA-Z0-9_]*)/', $line, $matches)) return;
+        if (!preg_match("/^\s*(?:(abstract|final|readonly)\s+)?(class|interface|trait|enum)\s+([a-zA-Z_][a-zA-Z0-9_]*)/", $line, $matches)) return;
 
         if ($this->inClass && $this->braceLevel > $this->classBraceLevel) return;
 
@@ -598,7 +598,7 @@ class Parser implements ParserContract
      */
     protected function setTypeToPropertyNode(PropertyNode $property, string $line): void
     {
-        if (!preg_match('/(?:(?:public|private|protected|readonly)\s+){1,2}((?:\?)?[a-zA-Z0-9_\\\|&()]+)\s+\$/', $line, $matches)) return;
+        if (!preg_match("/(?:(?:public|private|protected|readonly)\s+){1,2}((?:\?)?[a-zA-Z0-9_\\\|&()]+)\s+\$/", $line, $matches)) return;
 
         $type = $matches[1];
 
@@ -656,7 +656,7 @@ class Parser implements ParserContract
      */
     protected function parseFunctionNode(string $line, int $lineNumber): void
     {
-        if (!preg_match('/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)/', $line, $matches)) return;
+        if (!preg_match("/^\s*(?:(public|private|protected)\s+)?(?:(static)\s+)?function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)/", $line, $matches)) return;
 
         $this->currentFunctionName = $matches[3];
 
@@ -770,7 +770,7 @@ class Parser implements ParserContract
      */
     protected function setReturnTypeToFunctionNode(FunctionNode $function, string $line): void
     {
-        if (!preg_match('/\)\s*:\s*((?:\?)?[a-zA-Z0-9_\\\|&()]+)/', $line, $matches)) return;
+        if (!preg_match("/\)\s*:\s*((?:\?)?[a-zA-Z0-9_\\\|&()]+)/", $line, $matches)) return;
 
         $returnType = $matches[1];
 
