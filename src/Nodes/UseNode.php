@@ -128,6 +128,16 @@ class UseNode
         $this->namespace = implode("\\", $parts);
     }
 
+    /**
+     * Get full name
+     *
+     * @return string
+     */
+    public function fullName(): string
+    {
+        return $this->fullName;
+    }
+
     /*----------------------------------------*
      * Alias
      *----------------------------------------*/

@@ -7,8 +7,8 @@ namespace Sentinel\Detectors\Foundation;
 use Sentinel\Detectors\Foundation\Detector;
 
 /**
- * Type Detector
+ * Structure Detector
  *
  * @package Sentinel\Detectors\Foundation
  */
-abstract class TypeDetector extends Detector {}
+abstract class StructureDetector extends Detector {}
